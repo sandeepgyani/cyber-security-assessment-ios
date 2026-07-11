@@ -11,13 +11,15 @@ workflows:
           - pcs_distribution
         provisioning_profiles:
           - pcs_appstore_profile
-      node: 22.11.0
+      node: latest
       xcode: latest
     scripts:
       - name: Install npm dependencies
         script: npm install
       - name: Sync web assets into iOS project
-        script: npx cap sync ios
+        script: |
+          node -v
+          npx cap sync ios
       - name: Set up code signing
         script: xcode-project use-profiles
       - name: Build signed IPA
