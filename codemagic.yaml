@@ -7,8 +7,10 @@ workflows:
       app_store_connect: PCS_ASC_KEY
     environment:
       ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.pcssolutions.complianceapp
+        certificates:
+          - pcs_distribution
+        provisioning_profiles:
+          - pcs_appstore_profile
       node: 20.11.0
       xcode: latest
     scripts:
