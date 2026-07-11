@@ -1,0 +1,11 @@
+{
+  "name": "cyber-security-assessment",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PCS Solutions Cyber Security Assessment",
+  "dependencies": {
+    "@capacitor/cli": "^8.4.1",
+    "@capacitor/core": "^8.4.1",
+    "@capacitor/ios": "^8.4.1"
+  }
+}

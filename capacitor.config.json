@@ -1,0 +1,9 @@
+{
+  "appId": "com.pcssolutions.complianceapp",
+  "appName": "Cyber Security Assessment",
+  "webDir": "www",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#081E35"
+  }
+}
