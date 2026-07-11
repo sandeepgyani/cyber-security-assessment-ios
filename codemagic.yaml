@@ -11,7 +11,7 @@ workflows:
           - pcs_distribution
         provisioning_profiles:
           - pcs_appstore_profile
-      node: 20.11.0
+      node: 22.11.0
       xcode: latest
     scripts:
       - name: Install npm dependencies
