@@ -48,21 +48,22 @@ workflows:
           - pcs_macos_profile
       xcode: latest
     scripts:
-      - name: Create Mac Installer certificate on build machine
+      - name: Create Mac Installer certificate (fresh key on this machine)
         script: |
           set -e
-          # Generate a fresh private key on this ephemeral machine and create the
-          # installer certificate via the ASC API. keychain add-certificates then
-          # imports it into Codemagic's build keychain with proper (non-interactive)
-          # access for productbuild — using the keychain password the CLI itself owns.
+          # Generate a private key on this ephemeral machine, create the installer
+          # certificate from it via the ASC API, and capture the certificate content.
           openssl genrsa -out /tmp/inst_key.pem 2048
-          app-store-connect create-certificate \
+          app-store-connect certificates create \
             --type MAC_INSTALLER_DISTRIBUTION \
             --certificate-key=@file:/tmp/inst_key.pem \
-            --save
-          keychain add-certificates
-          echo "=== Signing identities after add ==="
-          security find-identity -v 2>&1 || true
+            --json > /tmp/cert.json
+          python3 -c "import json; d=json.load(open('/tmp/cert.json')); n=d.get('data') or d; a=n['attributes'] if isinstance(n,dict) and 'attributes' in n else n; print(a['certificateContent'])" > /tmp/cert.b64
+          base64 --decode /tmp/cert.b64 > /tmp/inst.cer
+          openssl x509 -inform DER -in /tmp/inst.cer -out /tmp/inst.pem
+          openssl pkcs12 -export -inkey /tmp/inst_key.pem -in /tmp/inst.pem \
+            -out /tmp/installer.p12 -passout pass:pcs -name "Mac Installer"
+          echo "installer p12 rebuilt"
       - name: Build macOS archive and package pkg
         script: |
           set -e
@@ -71,11 +72,22 @@ workflows:
             -archivePath build/macos/App.xcarchive archive
           APP=$(find build/macos/App.xcarchive/Products/Applications -maxdepth 1 -name '*.app' | head -1)
           echo "=== Archived app: $APP ==="
-          if [ -f "$APP/Contents/embedded.provisionprofile" ]; then echo "embedded.provisionprofile PRESENT"; else echo "WARNING: no embedded profile"; fi
-          INSTALLER_ID=$(security find-identity -v | grep -o '3rd Party Mac Developer Installer: [^"]*' | head -1)
-          echo "=== Installer identity: $INSTALLER_ID ==="
+          [ -f "$APP/Contents/embedded.provisionprofile" ] && echo "embedded.provisionprofile PRESENT" || echo "WARNING: no embedded profile"
+          # Import the installer cert into a keychain we fully control, granting
+          # productbuild explicit non-interactive access to its private key.
+          KC="$HOME/Library/Keychains/mac-signing.keychain-db"
+          security create-keychain -p pcs "$KC" || true
+          security set-keychain-settings "$KC"
+          security unlock-keychain -p pcs "$KC"
+          security import /tmp/installer.p12 -k "$KC" -P pcs -A \
+            -T /usr/bin/productbuild -T /usr/bin/pkgbuild -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k pcs "$KC" >/dev/null 2>&1 || true
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          echo "=== Signing identities ==="
+          security find-identity -v 2>&1 || true
           mkdir -p build/macos/pkg
-          productbuild --sign "$INSTALLER_ID" \
+          productbuild --sign "3rd Party Mac Developer Installer: Sandeep Gyani (V59U3N3H3V)" \
+            --keychain "$KC" \
             --component "$APP" /Applications \
             build/macos/pkg/CyberSecurityAssessment.pkg
           echo "=== PKG built ==="
