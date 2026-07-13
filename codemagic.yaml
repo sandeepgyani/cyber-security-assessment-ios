@@ -35,7 +35,7 @@ workflows:
         auth: integration
         submit_to_testflight: true
   macos-release:
-    name: macOS Release (Catalyst)
+    name: macOS Release (native)
     instance_type: mac_mini_m2
     max_build_duration: 60
     integrations:
@@ -46,21 +46,16 @@ workflows:
           - pcs_distribution
           - pcs_mac_installer
         provisioning_profiles:
-          - pcs_catalyst_profile
-      node: latest
+          - pcs_macos_profile
       xcode: latest
     scripts:
-      - name: Install npm dependencies
-        script: npm install
-      - name: Sync web assets into iOS project
-        script: npx cap sync ios
       - name: Set up code signing
         script: xcode-project use-profiles
-      - name: Build Mac Catalyst archive and export signed pkg
+      - name: Build macOS archive and export signed pkg
         script: |
           set -e
-          xcodebuild -project ios/App/App.xcodeproj -scheme App \
-            -destination 'generic/platform=macOS,variant=Mac Catalyst' \
+          xcodebuild -project macos/MacApp.xcodeproj -scheme MacApp \
+            -destination 'generic/platform=macOS' \
             -archivePath build/macos/App.xcarchive archive
           cat > /tmp/exportOptions.plist <<'PLIST'
           <?xml version="1.0" encoding="UTF-8"?>

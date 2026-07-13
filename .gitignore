@@ -2,3 +2,4 @@ node_modules/
 ios/App/App/public/
 ios/DerivedData/
 .DS_Store
+mac-signing/
