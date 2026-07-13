@@ -44,38 +44,38 @@ workflows:
       ios_signing:
         certificates:
           - pcs_distribution
-          - pcs_mac_installer
         provisioning_profiles:
           - pcs_macos_profile
       xcode: latest
     scripts:
-      - name: Install provisioning profile
-        script: |
-          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-          cp "$HOME/Library/MobileDevice/Provisioning Profiles/"*.mobileprovision /tmp/ 2>/dev/null || true
-          find "$HOME" -name '*.mobileprovision' 2>/dev/null | head -20
-      - name: Build macOS archive and package pkg manually
+      - name: Create Mac Installer certificate on build machine
         script: |
           set -e
-          echo "=== Signing identities ==="
+          # Generate a fresh private key on this ephemeral machine and create the
+          # installer certificate via the ASC API. keychain add-certificates then
+          # imports it into Codemagic's build keychain with proper (non-interactive)
+          # access for productbuild — using the keychain password the CLI itself owns.
+          openssl genrsa -out /tmp/inst_key.pem 2048
+          app-store-connect create-certificate \
+            --type MAC_INSTALLER_DISTRIBUTION \
+            --certificate-key=@file:/tmp/inst_key.pem \
+            --save
+          keychain add-certificates
+          echo "=== Signing identities after add ==="
           security find-identity -v 2>&1 || true
-          echo "=========================="
+      - name: Build macOS archive and package pkg
+        script: |
+          set -e
           xcodebuild -project macos/MacApp.xcodeproj -scheme MacApp \
             -destination 'generic/platform=macOS' \
             -archivePath build/macos/App.xcarchive archive
           APP=$(find build/macos/App.xcarchive/Products/Applications -maxdepth 1 -name '*.app' | head -1)
           echo "=== Archived app: $APP ==="
           if [ -f "$APP/Contents/embedded.provisionprofile" ]; then echo "embedded.provisionprofile PRESENT"; else echo "WARNING: no embedded profile"; fi
-          codesign -dvv "$APP" 2>&1 | grep -i 'authority\|identifier\|team' || true
-          echo "=== Granting non-interactive keychain access for productbuild ==="
-          security list-keychains -d user
-          for KC in $(security list-keychains -d user | tr -d ' "'); do
-            echo "-- $KC"
-            security unlock-keychain -p "" "$KC" 2>&1 | tail -1 || true
-            security set-key-partition-list -S apple-tool:,apple:,codesign:,unsigned: -s -k "" "$KC" 2>&1 | tail -2 || echo "  (empty-pw partition set failed for $KC)"
-          done
+          INSTALLER_ID=$(security find-identity -v | grep -o '3rd Party Mac Developer Installer: [^"]*' | head -1)
+          echo "=== Installer identity: $INSTALLER_ID ==="
           mkdir -p build/macos/pkg
-          productbuild --sign "3rd Party Mac Developer Installer: Sandeep Gyani (V59U3N3H3V)" \
+          productbuild --sign "$INSTALLER_ID" \
             --component "$APP" /Applications \
             build/macos/pkg/CyberSecurityAssessment.pkg
           echo "=== PKG built ==="
