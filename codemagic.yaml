@@ -54,6 +54,11 @@ workflows:
       - name: Build macOS archive and export signed pkg
         script: |
           set -e
+          echo "=== Signing identities in keychain ==="
+          security find-identity -v 2>&1 || true
+          echo "=== Codesigning identities ==="
+          security find-identity -v -p codesigning 2>&1 || true
+          echo "======================================"
           xcodebuild -project macos/MacApp.xcodeproj -scheme MacApp \
             -destination 'generic/platform=macOS' \
             -archivePath build/macos/App.xcarchive archive
@@ -72,8 +77,13 @@ workflows:
             </dict>
           </dict></plist>
           PLIST
-          xcodebuild -exportArchive -archivePath build/macos/App.xcarchive \
-            -exportPath build/macos/pkg -exportOptionsPlist /tmp/exportOptions.plist
+          if ! xcodebuild -exportArchive -archivePath build/macos/App.xcarchive \
+            -exportPath build/macos/pkg -exportOptionsPlist /tmp/exportOptions.plist 2>&1; then
+            echo "=== EXPORT FAILED — dumping distribution logs ==="
+            find /var/folders /tmp -name 'IDEDistribution.standard.log' 2>/dev/null -exec sh -c 'echo "--- {} ---"; tail -100 "{}"' \; || true
+            find "$HOME/Library/Logs" -name '*.log' -newermt '-5 minutes' 2>/dev/null -exec sh -c 'echo "--- {} ---"; tail -60 "{}"' \; || true
+            exit 70
+          fi
     artifacts:
       - build/macos/pkg/*.pkg
       - /tmp/xcodebuild_logs/*.log
