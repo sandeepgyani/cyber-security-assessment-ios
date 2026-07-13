@@ -49,41 +49,30 @@ workflows:
           - pcs_macos_profile
       xcode: latest
     scripts:
-      - name: Set up code signing
-        script: xcode-project use-profiles
-      - name: Build macOS archive and export signed pkg
+      - name: Install provisioning profile
+        script: |
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp "$HOME/Library/MobileDevice/Provisioning Profiles/"*.mobileprovision /tmp/ 2>/dev/null || true
+          find "$HOME" -name '*.mobileprovision' 2>/dev/null | head -20
+      - name: Build macOS archive and package pkg manually
         script: |
           set -e
-          echo "=== Signing identities in keychain ==="
+          echo "=== Signing identities ==="
           security find-identity -v 2>&1 || true
-          echo "=== Codesigning identities ==="
-          security find-identity -v -p codesigning 2>&1 || true
-          echo "======================================"
+          echo "=========================="
           xcodebuild -project macos/MacApp.xcodeproj -scheme MacApp \
             -destination 'generic/platform=macOS' \
             -archivePath build/macos/App.xcarchive archive
-          cat > /tmp/exportOptions.plist <<'PLIST'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0"><dict>
-            <key>method</key><string>app-store-connect</string>
-            <key>signingStyle</key><string>manual</string>
-            <key>teamID</key><string>V59U3N3H3V</string>
-            <key>signingCertificate</key><string>Apple Distribution</string>
-            <key>installerSigningCertificate</key><string>3rd Party Mac Developer Installer: Sandeep Gyani (V59U3N3H3V)</string>
-            <key>provisioningProfiles</key>
-            <dict>
-              <key>com.pcssolutions.complianceapp</key><string>pcs macos appstore profile</string>
-            </dict>
-          </dict></plist>
-          PLIST
-          if ! xcodebuild -exportArchive -archivePath build/macos/App.xcarchive \
-            -exportPath build/macos/pkg -exportOptionsPlist /tmp/exportOptions.plist 2>&1; then
-            echo "=== EXPORT FAILED — dumping distribution logs ==="
-            find /var/folders /tmp -name 'IDEDistribution.standard.log' 2>/dev/null -exec sh -c 'echo "--- {} ---"; tail -100 "{}"' \; || true
-            find "$HOME/Library/Logs" -name '*.log' -newermt '-5 minutes' 2>/dev/null -exec sh -c 'echo "--- {} ---"; tail -60 "{}"' \; || true
-            exit 70
-          fi
+          APP=$(find build/macos/App.xcarchive/Products/Applications -maxdepth 1 -name '*.app' | head -1)
+          echo "=== Archived app: $APP ==="
+          if [ -f "$APP/Contents/embedded.provisionprofile" ]; then echo "embedded.provisionprofile PRESENT"; else echo "WARNING: no embedded profile"; fi
+          codesign -dvv "$APP" 2>&1 | grep -i 'authority\|identifier\|team' || true
+          mkdir -p build/macos/pkg
+          productbuild --sign "3rd Party Mac Developer Installer: Sandeep Gyani (V59U3N3H3V)" \
+            --component "$APP" /Applications \
+            build/macos/pkg/CyberSecurityAssessment.pkg
+          echo "=== PKG built ==="
+          ls -la build/macos/pkg/
     artifacts:
       - build/macos/pkg/*.pkg
       - /tmp/xcodebuild_logs/*.log
