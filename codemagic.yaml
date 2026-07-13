@@ -67,6 +67,13 @@ workflows:
           echo "=== Archived app: $APP ==="
           if [ -f "$APP/Contents/embedded.provisionprofile" ]; then echo "embedded.provisionprofile PRESENT"; else echo "WARNING: no embedded profile"; fi
           codesign -dvv "$APP" 2>&1 | grep -i 'authority\|identifier\|team' || true
+          echo "=== Granting non-interactive keychain access for productbuild ==="
+          security list-keychains -d user
+          for KC in $(security list-keychains -d user | tr -d ' "'); do
+            echo "-- $KC"
+            security unlock-keychain -p "" "$KC" 2>&1 | tail -1 || true
+            security set-key-partition-list -S apple-tool:,apple:,codesign:,unsigned: -s -k "" "$KC" 2>&1 | tail -2 || echo "  (empty-pw partition set failed for $KC)"
+          done
           mkdir -p build/macos/pkg
           productbuild --sign "3rd Party Mac Developer Installer: Sandeep Gyani (V59U3N3H3V)" \
             --component "$APP" /Applications \
