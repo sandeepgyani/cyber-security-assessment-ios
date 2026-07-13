@@ -34,3 +34,47 @@ workflows:
       app_store_connect:
         auth: integration
         submit_to_testflight: true
+  macos-release:
+    name: macOS Release (Catalyst)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      app_store_connect: PCS_ASC_KEY
+    environment:
+      ios_signing:
+        certificates:
+          - pcs_distribution
+          - pcs_mac_installer
+        provisioning_profiles:
+          - pcs_catalyst_profile
+      node: latest
+      xcode: latest
+    scripts:
+      - name: Install npm dependencies
+        script: npm install
+      - name: Sync web assets into iOS project
+        script: npx cap sync ios
+      - name: Set up code signing
+        script: xcode-project use-profiles
+      - name: Build Mac Catalyst archive and export signed pkg
+        script: |
+          set -e
+          xcodebuild -project ios/App/App.xcodeproj -scheme App \
+            -destination 'generic/platform=macOS,variant=Mac Catalyst' \
+            -archivePath build/macos/App.xcarchive archive
+          cat > /tmp/exportOptions.plist <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store</string>
+            <key>installerSigningCertificate</key><string>3rd Party Mac Developer Installer: Sandeep Gyani (V59U3N3H3V)</string>
+          </dict></plist>
+          PLIST
+          xcodebuild -exportArchive -archivePath build/macos/App.xcarchive \
+            -exportPath build/macos/pkg -exportOptionsPlist /tmp/exportOptions.plist
+    artifacts:
+      - build/macos/pkg/*.pkg
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
