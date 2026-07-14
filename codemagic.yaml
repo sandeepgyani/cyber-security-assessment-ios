@@ -62,7 +62,12 @@ workflows:
           tr -d '\n\r' < /tmp/cert.b64 > /tmp/cert.oneline
           openssl base64 -d -A -in /tmp/cert.oneline -out /tmp/inst.cer
           openssl x509 -inform DER -in /tmp/inst.cer -out /tmp/inst.pem
+          # Use legacy PKCS12 algorithms so macOS `security import` can parse it
+          # (OpenSSL 3 defaults produce a MAC the Security framework rejects).
           openssl pkcs12 -export -inkey /tmp/inst_key.pem -in /tmp/inst.pem \
+            -out /tmp/installer.p12 -passout pass:pcs -name "Mac Installer" \
+            -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES -macalg sha1 \
+          || /usr/bin/openssl pkcs12 -export -inkey /tmp/inst_key.pem -in /tmp/inst.pem \
             -out /tmp/installer.p12 -passout pass:pcs -name "Mac Installer"
           echo "installer p12 rebuilt"
       - name: Build macOS archive and package pkg
