@@ -59,7 +59,8 @@ workflows:
             --certificate-key=@file:/tmp/inst_key.pem \
             --json > /tmp/cert.json
           python3 -c "import json; d=json.load(open('/tmp/cert.json')); n=d.get('data') or d; a=n['attributes'] if isinstance(n,dict) and 'attributes' in n else n; print(a['certificateContent'])" > /tmp/cert.b64
-          base64 --decode /tmp/cert.b64 > /tmp/inst.cer
+          tr -d '\n\r' < /tmp/cert.b64 > /tmp/cert.oneline
+          openssl base64 -d -A -in /tmp/cert.oneline -out /tmp/inst.cer
           openssl x509 -inform DER -in /tmp/inst.cer -out /tmp/inst.pem
           openssl pkcs12 -export -inkey /tmp/inst_key.pem -in /tmp/inst.pem \
             -out /tmp/installer.p12 -passout pass:pcs -name "Mac Installer"
